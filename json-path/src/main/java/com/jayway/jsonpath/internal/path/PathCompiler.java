@@ -120,13 +120,68 @@ public class PathCompiler {
         }
 
         PathTokenAppender appender = pathToken.getPathTokenAppender();
-        readNextToken(appender);
+        boolean readAgain = true;
+        while (readAgain) {
+            readAgain = readNextToken(appender);
+        }
 
         return pathToken;
     }
 
     //
+    // Classifies a token starting with '[' without moving the position of the
+    // given index. Only the significant characters needed to determine the
+    // token type are inspected.
     //
+    static BracketToken classifyBracket(CharacterIndex path) {
+        int readPosition = path.position() + 1;
+        while (!path.isOutOfBounds(readPosition) && path.charAt(readPosition) == ' ') {
+            readPosition++;
+        }
+        if (path.isOutOfBounds(readPosition)) {
+            return BracketToken.UNKNOWN;
+        }
+        char firstSignificant = path.charAt(readPosition);
+        switch (firstSignificant) {
+            case SINGLE_QUOTE:
+            case DOUBLE_QUOTE:
+                return BracketToken.PROPERTY;
+            case WILDCARD:
+                return BracketToken.WILDCARD;
+            case MINUS:
+            case SPLIT:
+                return BracketToken.ARRAY;
+            case BEGIN_FILTER:
+                readPosition++;
+                while (!path.isOutOfBounds(readPosition) && path.charAt(readPosition) == ' ') {
+                    readPosition++;
+                }
+                if (path.isOutOfBounds(readPosition)) {
+                    return BracketToken.UNKNOWN;
+                }
+                char secondSignificant = path.charAt(readPosition);
+                if (secondSignificant == OPEN_PARENTHESIS) {
+                    return BracketToken.FILTER;
+                }
+                if (secondSignificant == CLOSE_SQUARE_BRACKET || secondSignificant == COMMA) {
+                    return BracketToken.PLACEHOLDER;
+                }
+                return BracketToken.UNKNOWN;
+            default:
+                if (isDigit(firstSignificant)) {
+                    return BracketToken.ARRAY;
+                }
+                return BracketToken.UNKNOWN;
+        }
+    }
+
+    //
+    //
+    //
+    //
+    // Reads a single token. Returns true when another token must be read:
+    // always after a dot token (the dot is only a separator), otherwise only
+    // when the current position is not the tail of the path.
     //
     private boolean readNextToken(PathTokenAppender appender) {
 
@@ -134,11 +189,30 @@ public class PathCompiler {
 
         switch (c) {
             case OPEN_SQUARE_BRACKET:
-                if (!readBracketPropertyToken(appender) && !readArrayToken(appender) && !readWildCardToken(appender)
-                    && !readFilterToken(appender) && !readPlaceholderToken(appender)) {
+                boolean parsed;
+                switch (classifyBracket(path)) {
+                    case PROPERTY:
+                        parsed = readBracketPropertyToken(appender);
+                        break;
+                    case ARRAY:
+                        parsed = readArrayToken(appender);
+                        break;
+                    case WILDCARD:
+                        parsed = readWildCardToken(appender);
+                        break;
+                    case FILTER:
+                        parsed = readFilterToken(appender);
+                        break;
+                    case PLACEHOLDER:
+                        parsed = readPlaceholderToken(appender);
+                        break;
+                    default:
+                        parsed = false;
+                }
+                if (!parsed) {
                     fail("Could not parse token starting at position " + path.position() + ". Expected ?, ', 0-9, * ");
                 }
-                return true;
+                return !path.currentIsTail();
             case PERIOD:
                 if (!readDotToken(appender)) {
                     fail("Could not parse token starting at position " + path.position());
@@ -148,12 +222,12 @@ public class PathCompiler {
                 if (!readWildCardToken(appender)) {
                     fail("Could not parse token starting at position " + path.position());
                 }
-                return true;
+                return !path.currentIsTail();
             default:
                 if (!readPropertyOrFunctionToken(appender)) {
                     fail("Could not parse token starting at position " + path.position());
                 }
-                return true;
+                return !path.currentIsTail();
         }
     }
 
@@ -172,7 +246,7 @@ public class PathCompiler {
         if(path.currentCharIs(PERIOD)){
             throw new InvalidPathException("Character '.' on position " + path.position() + " is not valid.");
         }
-        return readNextToken(appender);
+        return true;
     }
 
     //
@@ -253,7 +327,7 @@ public class PathCompiler {
             appender.appendPathToken(PathTokenFactory.createSinglePropertyPathToken(property, SINGLE_QUOTE));
         }
 
-        return path.currentIsTail() || readNextToken(appender);
+        return true;
     }
 
     /**
@@ -349,15 +423,11 @@ public class PathCompiler {
                 // we've encountered a COMMA do the same
                 case CLOSE_PARENTHESIS:
                     groupParen--;
-                    //CS304 Issue link: https://github.com/json-path/JsonPath/issues/620
-                    if (0 > groupParen || priorChar == '(') {
-                        parameter.append(c);
-                    }
                 case COMMA:
                     // In this state we've reach the end of a function parameter and we can pass along the parameter string
                     // to the parser
                     if ((0 == groupQuote && 0 == groupBrace && 0 == groupBracket
-                            && ((0 == groupParen && CLOSE_PARENTHESIS == c) || 1 == groupParen))) {
+                            && ((0 == groupParen && CLOSE_PARENTHESIS == c) || (1 == groupParen && COMMA == c)))) {
                         endOfStream = (0 == groupParen);
 
                         if (null != type) {
@@ -443,7 +513,7 @@ public class PathCompiler {
 
         path.setPosition(expressionEndIndex + 1);
 
-        return path.currentIsTail() || readNextToken(appender);
+        return true;
     }
 
     //
@@ -480,7 +550,7 @@ public class PathCompiler {
 
         path.setPosition(closeStatementBracketIndex + 1);
 
-        return path.currentIsTail() || readNextToken(appender);
+        return true;
 
     }
 
@@ -512,7 +582,7 @@ public class PathCompiler {
 
         appender.appendPathToken(PathTokenFactory.createWildCardPathToken());
 
-        return path.currentIsTail() || readNextToken(appender);
+        return true;
     }
 
     //
@@ -561,7 +631,7 @@ public class PathCompiler {
 
         path.setPosition(expressionEndIndex + 1);
 
-        return path.currentIsTail() || readNextToken(appender);
+        return true;
     }
 
     //
@@ -635,7 +705,7 @@ public class PathCompiler {
 
         appender.appendPathToken(PathTokenFactory.createPropertyPathToken(properties, potentialStringDelimiter));
 
-        return path.currentIsTail() || readNextToken(appender);
+        return true;
     }
 
     public static boolean fail(String message) {

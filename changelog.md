@@ -1,3 +1,29 @@
+Unreleased
+===========
+* PathCompiler: token reading is now loop-driven instead of mutually recursive,
+  so path compilation no longer overflows the thread stack on long paths.
+  Measured on the pre-change implementation (default thread stack), compilation
+  failed with StackOverflowError above 4863 `['a']` segments, 2735 `.a` segments
+  and 5367 `[0]` segments; after the change, paths with 20000 segments of each
+  shape compile successfully, as do 2048 nested function path parameters
+  (`$.sum($.sum(... $.numbers[0] ...))`).
+* PathCompiler: removed 7 duplicated read-entry re-invocations - the six
+  `return path.currentIsTail() || readNextToken(appender);` tails in
+  readPropertyOrFunctionToken, readBracketPropertyToken, readArrayToken,
+  readWildCardToken, readFilterToken and readPlaceholderToken, plus the
+  `return readNextToken(appender);` tail in readDotToken. A single loop in
+  readContextToken now drives token reading.
+* PathCompiler: '[' tokens are now classified once by the new package-private
+  static method `classifyBracket(CharacterIndex)` (returning the new
+  `BracketToken` enum: PROPERTY, ARRAY, WILDCARD, FILTER, PLACEHOLDER, UNKNOWN)
+  instead of trial-parsing with up to five readers that each rescanned the same
+  characters. classifyBracket only inspects the significant characters needed
+  for the decision and never moves the index position.
+* PathCompiler: function parameters that are themselves paths containing
+  nested function calls with arguments (e.g. `$.sum($.sum($.numbers[0]))`)
+  now compile correctly; previously they were rejected with
+  "Arguments to function: '<name>' are not closed properly."
+
 2.2.0 (2016-02-29)
 ===========
 * Upgraded dependency versions
@@ -74,5 +100,4 @@ Release history
 * 0.5.4 (2011-06-26)
 * 0.5.3 (2011-02-18)
 * 0.5.2 (2011-02-08)
-
 

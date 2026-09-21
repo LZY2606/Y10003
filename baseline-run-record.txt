@@ -1,0 +1,14 @@
+Baseline run record (pre-refactor, two-phase acceptance phase 1)
+commit: a94559715f99ff88de5a0682125a9283d59fb60e
+date: 2026-09-21T14:22:39Z
+command: ./gradlew :json-path:test --tests "*PathCompilerBaselineTest" --rerun-tasks
+
+PathCompilerBaselineTest > trailing_single_char_after_array_index_is_dropped() PASSED
+PathCompilerBaselineTest > trailing_multi_char_after_bracket_property_is_property() PASSED
+PathCompilerBaselineTest > trailing_single_char_after_mixed_path_is_dropped() PASSED
+PathCompilerBaselineTest > blank_padded_bracket_property_is_normalized() PASSED
+PathCompilerBaselineTest > tab_before_bracket_property_is_rejected() PASSED
+PathCompilerBaselineTest > bare_word_in_brackets_is_rejected() PASSED
+PathCompilerBaselineTest > trailing_single_char_after_bracket_property_is_dropped() PASSED
+PathCompilerBaselineTest > trailing_multi_char_after_array_index_is_property() PASSED
+BUILD SUCCESSFUL in 19s
