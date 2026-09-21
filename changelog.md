@@ -1,3 +1,23 @@
+Unreleased
+===========
+* Reworked `PathCompiler` token reading from mutually recursive readers into a loop-driven
+  dispatcher, removing all 7 re-entrant calls into the token reading entry point
+  (6x `return path.currentIsTail() || readNextToken(appender);` at the end of the token
+  readers, 1x `return readNextToken(appender);` in `readDotToken`).
+  Before this change the maximum compilable path depth on a default thread stack
+  (measured, JDK 17, macOS) was 5076 `['a']` segments, 2744 `.a` segments and 5173 `[0]`
+  segments - anything deeper died with `StackOverflowError`. After this change paths with
+  20000 segments of each shape compile on the default thread stack.
+* Compiling nested function path parameters (e.g. `$.sum($.sum(...))`) no longer recurses
+  per nesting level: parameter paths are compiled from a work queue, so 2048 nested
+  function calls compile on the default thread stack. As a side effect, nested function
+  calls with non-empty arguments (e.g. `$.sum($.sum(1))`) now compile instead of failing
+  with "Arguments to function: 'sum' are not closed properly."
+* Replaced the trial-and-error dispatch of `[` tokens (each of the five readers re-scanned
+  the same characters) with a single classification step: new package-private enum
+  `BracketToken` and `PathCompiler.classifyBracket(CharacterIndex)`, which only reads the
+  characters needed for classification and never moves the position.
+
 2.2.0 (2016-02-29)
 ===========
 * Upgraded dependency versions
@@ -74,5 +94,4 @@ Release history
 * 0.5.4 (2011-06-26)
 * 0.5.3 (2011-02-18)
 * 0.5.2 (2011-02-08)
-
 
